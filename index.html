@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Terrain Mask</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+<link rel="stylesheet" type="text/css" href="./css/mapstyle.css" />
+<script src='https://npmcdn.com/@turf/turf/turf.min.js'></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.0.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.0.0/mapbox-gl.css" rel="stylesheet" />
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+<style>
+
+body {
+    font-family: sans-serif;
+}
+
+#mapWrap, .credit {
+    width:100%;
+    display: block;
+    font-family: sans-serif;
+    color:#555;
+    max-width:1200px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.credit {
+    line-height: 6px;
+    font-size: 12px;
+    margin-top:20px;
+    color:#888;
+}
+
+.credit a {
+    text-decoration:none;
+    color: coral;
+}
+
+</style>
+</head>
+<body>
+<div id="mapWrap">
+    <div class="column left">
+        <h2>3D Terrain Masks</h2>
+        <p>With the release of <a href="https://www.mapbox.com/blog/mapbox-gl-js-v2-3d-maps-camera-api-sky-api-launch" target="_blank">Mapbox GL JS V2</a>, creating dynamic 3D terrain masks has never been easier.</p>
+        <p>For this experiment I used <a href="http://geojson.io/" target="_blank">geojson.io</a> and Tristen's <a href="http://tristen.ca/inverted-polygons/#1.5/34/5" target="_blank">inverted polygon app</a> to create the mask, which can then be added like any other geojson layer.</p>
+        <p>Future Mode™ uses <a href="https://turfjs.org/docs/#hexGrid" target="_blank">Turf</a> to draw a hex grid, which conforms to the 3D elevation data nicely.</p>
+        <div id="futureMode">Future Mode</div>
+    </div>
+    <div class="column right">
+        <div id="map"></div>
+    </div>
+</div>
+<div class="credit">
+    <!-- <p>Data:</p> -->
+    <p>By: <a href="http://www.mapto.ca/" target="_blank">MapTO</a></p>
+    <p>Code: <a href="https://github.com/willymaps/portal" target="_blank">Github</a></p>
+</div>
+
+<script>
+var futureState = true;
+var inverted;
+
+document.getElementById("futureMode").addEventListener("click", futureMode);
+
+mapboxgl.accessToken = 'pk.eyJ1Ijoid2lsbGlhbWJlbmRhdmlzIiwiYSI6IlVrb3BGVzQifQ.jeHxDCnpXXvAXKfAFEYG-A';
+
+var map = new mapboxgl.Map({
+    container: 'map',
+    zoom: 15.8,
+    center: [-111.79385481717296, 34.81860745913767],
+    pitch: 40,
+    bearing: 70,
+    style: 'mapbox://styles/mapbox-map-design/ckhqrf2tz0dt119ny6azh975y'
+    // style: 'mapbox://styles/mapbox/satellite-streets-v11'
+});
+
+map.on('load', function () {
+    map.addSource('mapbox-dem', {
+        'type': 'raster-dem',
+        'url': 'mapbox://mapbox.mapbox-terrain-dem-v1',
+        'tileSize': 512,
+        'maxzoom': 14
+    });
+    // add the DEM source as a terrain layer with exaggerated height
+    map.setTerrain({ 'source': 'mapbox-dem', 'exaggeration': 1 });
+
+    buildSquare();
+});
+
+
+function buildSquare() {
+    let line = turf.lineString([[
+              -111.79610252380371,
+              34.815811630603896
+            ],
+            [
+              -111.78897857666016,
+              34.815811630603896
+            ],
+            [
+              -111.78897857666016,
+              34.822047660464314
+            ],
+            [
+              -111.79610252380371,
+              34.822047660464314
+            ],
+            [
+              -111.79610252380371,
+              34.815811630603896
+            ]]); 
+    
+    let polygon = turf.lineToPolygon(line);
+    let bbox = turf.bbox(line);
+    let cellSide = 0.003;
+    let options = {units: 'kilometers'};
+    let squareGrid = turf.hexGrid(bbox, cellSide, options);
+    
+
+    map.addSource('inverted', {
+        type: 'geojson',
+        data: inverted
+    });
+
+    map.addSource('square', {
+        type: 'geojson',
+        data: polygon
+    });
+
+    map.addSource('grid', {
+        type: 'geojson',
+        data: squareGrid
+    });
+
+    map.addLayer({
+        'id': 'square-fill',
+        'type': 'fill',
+        'source': 'square',
+        'layout': {
+            'visibility': 'none'
+        },
+        'paint': {
+            'fill-color': '#ffffff',
+            'fill-opacity': 0.85
+        }
+    });
+
+    map.addLayer({
+        'id': 'square-fill-inverted',
+        'type': 'fill',
+        'source': 'inverted',
+        'paint': {
+            'fill-color': '#ffffff',
+            'fill-opacity': 1
+        }
+    });
+
+    map.addLayer({
+        'id': 'outline',
+        'type': 'line',
+        'source': 'grid',
+        'layout': {
+            'line-join': 'round',
+            'line-cap': 'round',
+            'visibility': 'none'
+        },
+        'paint': {
+            'line-color': 'deeppink',
+            'line-width': 0.1
+        }
+    });
+}
+
+function futureMode() {
+    if (futureState) {
+        futureState = false;
+        map.setLayoutProperty('outline', 'visibility', 'visible');
+        map.setLayoutProperty('square-fill', 'visibility', 'visible');
+    } else {
+        futureState = true;
+        map.setLayoutProperty('outline', 'visibility', 'none');
+        map.setLayoutProperty('square-fill', 'visibility', 'none');
+    }
+}
+
+
+$(document).ready(function (){
+    $.ajax({
+      url:"./inverted.geojson",
+      dataType: "json",
+      success: function (data) {
+        inverted = data;
+      },
+      error: function () {
+        console.log('error loading data');
+      }
+    });
+});
+
+
+</script>
+</body>
+</html>
